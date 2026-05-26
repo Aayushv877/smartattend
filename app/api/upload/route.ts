@@ -8,7 +8,7 @@ import {
 export const runtime = "nodejs";
 
 function getRequiredEnv(name: string) {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
 
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -38,23 +38,23 @@ export async function POST(
       );
     }
 
-    const bucket =
-      process.env.S3_BUCKET_NAME ??
-      process.env.AWS_BUCKET_NAME;
+    const bucket = getRequiredEnv("AWS_BUCKET_NAME");
     const region = getRequiredEnv("AWS_REGION");
     const accessKeyId =
       getRequiredEnv("AWS_ACCESS_KEY_ID");
     const secretAccessKey =
       getRequiredEnv("AWS_SECRET_ACCESS_KEY");
 
-    console.log("Bucket:", bucket);
     console.log("Region:", region);
-
-    if (!bucket) {
-      throw new Error(
-        "Missing required environment variable: S3_BUCKET_NAME"
-      );
-    }
+    console.log("Bucket:", bucket);
+    console.log(
+      "Access Key Exists:",
+      !!process.env.AWS_ACCESS_KEY_ID
+    );
+    console.log(
+      "Secret Exists:",
+      !!process.env.AWS_SECRET_ACCESS_KEY
+    );
 
     if (!file.type) {
       throw new Error("Uploaded file is missing ContentType");
