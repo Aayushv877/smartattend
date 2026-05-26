@@ -23,9 +23,14 @@ import {
 } from 'aws-amplify/auth';
 import { uploadData } from 'aws-amplify/storage';
 
+const S3_BUCKET_NAME =
+  process.env.NEXT_PUBLIC_S3_BUCKET_NAME ?? process.env.NEXT_PUBLIC_S3_BUCKET ?? '';
+const S3_REGION = process.env.NEXT_PUBLIC_AWS_REGION ?? 'us-east-1';
+
 /* ─── Amplify Configuration ─── */
 // Replace these values with your actual AWS Amplify project outputs.
 // In production, use `amplify_outputs.json` (Amplify Gen 2) or `aws-exports.js` (Gen 1).
+console.log('Bucket Name:', S3_BUCKET_NAME);
 Amplify.configure({
   Auth: {
     Cognito: {
@@ -36,8 +41,8 @@ Amplify.configure({
   },
   Storage: {
     S3: {
-      bucket: process.env.NEXT_PUBLIC_S3_BUCKET ?? '',
-      region: process.env.NEXT_PUBLIC_AWS_REGION ?? 'us-east-1',
+      bucket: S3_BUCKET_NAME,
+      region: S3_REGION,
     },
   },
 });
@@ -406,22 +411,44 @@ function useAuth() {
 }
 
 /* ─── Attendance API service ─── */
+const ATTENDANCE_API_URL =
+  'https://861othoid8.execute-api.ap-south-1.amazonaws.com/prod/mark-attendance';
+
 const attendanceService = {
-  async markAttendance(imageData: string) {
+  async markAttendance(imageData: string, username: string) {
     const token = await authService.getIdToken();
-    // In production: replace with real API Gateway call:
-    // await fetch('https://<api-id>.execute-api.<region>.amazonaws.com/prod/attendance/mark', {
-    //   method: 'POST',
-    //   headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ image: imageData }),
-    // });
-    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+    if (!ATTENDANCE_API_URL) throw new Error('Attendance API URL is not configured.');
+    console.log('Final API URL:', ATTENDANCE_API_URL);
+    console.log('REAL FETCH URL:', ATTENDANCE_API_URL);
+    console.log('Fetch URL:', ATTENDANCE_API_URL);
+    console.log('Calling endpoint:', ATTENDANCE_API_URL);
+    console.log('Payload:', { username, imageDataLength: imageData.length, hasBase64: imageData.includes('base64,') });
+    console.log('STEP 2');
+    const payload = { image: imageData, username, token };
+    let response: Response;
+    try {
+      console.log('Sending request...');
+      response = await fetch(ATTENDANCE_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error('Fetch Error:', error);
+      throw error;
+    }
+    const responsePayload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(responsePayload?.message ?? `Attendance API failed with status ${response.status}`);
+    }
     return {
-      success: true,
-      confidence: parseFloat((96 + Math.random() * 3.5).toFixed(1)),
-      message: 'Attendance marked via AI facial recognition',
-      timestamp: new Date().toISOString(),
-      token: token ? token.slice(0, 20) + '…' : 'session-active',
+      success: responsePayload.success ?? true,
+      confidence: Number(responsePayload.confidence ?? responsePayload.Confidence ?? 0),
+      message: responsePayload.message ?? 'Attendance marked via AI facial recognition',
+      timestamp: responsePayload.timestamp ?? new Date().toISOString(),
+      token: token ? token.slice(0, 20) + '...' : 'session-active',
     };
   },
 
@@ -431,7 +458,10 @@ const attendanceService = {
     await uploadData({
       key,
       data: file,
-      options: { contentType: file.type },
+      options: {
+        bucket: { bucketName: S3_BUCKET_NAME, region: S3_REGION },
+        contentType: file.type,
+      },
     }).result;
     return key;
   },
@@ -440,13 +470,21 @@ const attendanceService = {
     // Convert base64 data URL to Blob
     const res = await fetch(dataUrl);
     const blob = await res.blob();
-    const key = `attendance/${username}/${Date.now()}.jpg`;
-    await uploadData({
-      key,
-      data: blob,
-      options: { contentType: 'image/jpeg' },
-    }).result;
-    return key;
+    const file = new File([blob], `${username}-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadResponse = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const uploadPayload = await uploadResponse.json().catch(() => ({}));
+
+    if (!uploadResponse.ok) {
+      throw new Error(uploadPayload?.error ?? `S3 upload failed with status ${uploadResponse.status}`);
+    }
+
+    return uploadPayload.fileUrl ?? file.name;
   },
 
   async getHistory() {
@@ -1295,15 +1333,23 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
   };
 
   const submitAttendance = async (imageData: string) => {
+    console.log('STEP 1');
+    if (!imageData?.startsWith('data:image/') || !imageData.includes('base64,')) {
+      console.error('Captured image is missing base64 image data.');
+      toast.add('Face capture failed. Please retry.', 'error');
+      return;
+    }
     setStatus('scanning'); setProgress(0); setResult(null);
     const interval = setInterval(() => setProgress((p) => Math.min(p + 10, 90)), 180);
     try {
-      // Upload snapshot to S3
-      await attendanceService.uploadAttendanceImage(imageData, user.username);
-      const res = await attendanceService.markAttendance(imageData);
+      const res = await attendanceService.markAttendance(imageData, user.username);
+      attendanceService.uploadAttendanceImage(imageData, user.username).catch((error) => {
+        console.error('Attendance snapshot upload failed:', error);
+      });
       clearInterval(interval); setProgress(100);
       setTimeout(() => { setStatus('success'); setResult(res); toast.add(`Attendance marked! Confidence: ${res.confidence}%`, 'success'); }, 400);
-    } catch {
+    } catch (error) {
+      console.error('Fetch Error:', error);
       clearInterval(interval); setStatus('error');
       toast.add('Face recognition failed. Please retry.', 'error');
     }
@@ -1314,7 +1360,10 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
     const canvas = document.createElement('canvas');
     canvas.width = videoRef.current.videoWidth || 640;
     canvas.height = videoRef.current.videoHeight || 480;
-    canvas.getContext('2d')?.drawImage(videoRef.current, 0, 0);
+    const context = canvas.getContext('2d');
+    if (!context) { console.error('Unable to create canvas context.'); toast.add('Face capture failed. Please retry.', 'error'); return; }
+    context.filter = 'brightness(1.15) contrast(1.05)';
+    context.drawImage(videoRef.current, 0, 0);
     const data = canvas.toDataURL('image/jpeg');
     setPreview(data); stopCamera(); submitAttendance(data);
   };
@@ -1352,7 +1401,7 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
 
           {mode === 'camera' ? (
             <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-secondary)', aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: cameraOn ? 'block' : 'none' }} />
+              <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.12)', display: cameraOn ? 'block' : 'none' }} />
               {!cameraOn && !preview && (
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                   <Icon name="camera" size={48} color="var(--border)" />
@@ -1736,7 +1785,7 @@ const AdminPage = () => {
           <div className="font-semibold mb-4">API Activity Overview</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[
-              { endpoint: 'POST /api/attendance/mark', calls: 1247, status: '200', ms: 89 },
+              { endpoint: 'POST /mark-attendance', calls: 1247, status: '200', ms: 89 },
               { endpoint: 'GET /api/attendance/history', calls: 892, status: '200', ms: 45 },
               { endpoint: 'POST /api/auth/login', calls: 234, status: '200', ms: 120 },
               { endpoint: 'GET /api/admin/users', calls: 156, status: '200', ms: 34 },
