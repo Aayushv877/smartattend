@@ -34,11 +34,12 @@ console.log('Bucket Name:', S3_BUCKET_NAME);
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? '',
-      userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? '',
+      userPoolId: 'ap-south-1_U50GXMNKc',
+      userPoolClientId: '34stje0okvsg8kg5j1p515ru3l',
       signUpVerificationMethod: 'code',
     },
   },
+});
   Storage: {
     S3: {
       bucket: S3_BUCKET_NAME,
