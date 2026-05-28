@@ -38,12 +38,13 @@ export async function POST(
       );
     }
 
-    const bucket = getRequiredEnv("NEXT_PUBLIC_S3_BUCKET_NAME");
-const region = getRequiredEnv("NEXT_PUBLIC_S3_REGION");
-    const accessKeyId =
-      getRequiredEnv("NEXT_PUBLIC_AWS_ACCESS_KEY_ID");
-    const secretAccessKey =
-      getRequiredEnv("NEXT_PUBLIC_AWS_SECRET_ACCESS_KEY");
+    const bucket = getRequiredEnv("S3_BUCKET_NAME");
+const region = getRequiredEnv("S3_REGION");
+const accessKeyId =
+  getRequiredEnv("APP_ACCESS_KEY_ID");
+
+const secretAccessKey =
+  getRequiredEnv("APP_SECRET_ACCESS_KEY");
     console.log("Region:", region);
     console.log("Bucket:", bucket);
     console.log(
