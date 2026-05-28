@@ -279,35 +279,53 @@ const useApp = () => useContext(AppContext);
 // Suppress unused warning — useApp is available for child components
 void useApp;
 
-/* ─── Mock Data (analytics only — no mock auth) ─── */
-const MOCK_ATTENDANCE = [
-  { id: 1, date: '2025-07-14', checkIn: '09:02', checkOut: '18:15', status: 'present', confidence: 98.2, method: 'facial', location: 'HQ Mumbai' },
-  { id: 2, date: '2025-07-13', checkIn: '09:18', checkOut: '17:45', status: 'present', confidence: 97.8, method: 'facial', location: 'HQ Mumbai' },
-  { id: 3, date: '2025-07-12', checkIn: '-', checkOut: '-', status: 'absent', confidence: null, method: '-', location: '-' },
-  { id: 4, date: '2025-07-11', checkIn: '09:05', checkOut: '18:30', status: 'present', confidence: 99.1, method: 'facial', location: 'HQ Mumbai' },
-  { id: 5, date: '2025-07-10', checkIn: '10:15', checkOut: '17:00', status: 'late', confidence: 96.5, method: 'upload', location: 'Remote' },
-  { id: 6, date: '2025-07-09', checkIn: '09:00', checkOut: '18:00', status: 'present', confidence: 98.9, method: 'facial', location: 'HQ Mumbai' },
-  { id: 7, date: '2025-07-08', checkIn: '09:12', checkOut: '18:22', status: 'present', confidence: 97.3, method: 'facial', location: 'HQ Mumbai' },
-  { id: 8, date: '2025-07-07', checkIn: '-', checkOut: '-', status: 'absent', confidence: null, method: '-', location: '-' },
-  { id: 9, date: '2025-07-06', checkIn: '09:00', checkOut: '18:00', status: 'present', confidence: 99.4, method: 'facial', location: 'HQ Mumbai' },
-  { id: 10, date: '2025-07-05', checkIn: '09:00', checkOut: '18:00', status: 'present', confidence: 98.1, method: 'facial', location: 'HQ Mumbai' },
-];
+/* Attendance Data Types */
+interface AttendanceRecord {
+  id: string | number;
+  date: string;
+  checkIn: string;
+  checkOut: string;
+  status: string;
+  confidence: number | null;
+  method: string;
+  location: string;
+  username: string;
+  timestamp: string;
+}
 
-const MOCK_ADMIN_USERS = [
-  { id: 1, name: 'Priya Nair', email: 'priya@smartattend.io', role: 'user', dept: 'Design', avatar: 'PN', status: 'active', joined: '2024-02-20' },
-  { id: 2, name: 'Rahul Mehta', email: 'rahul@smartattend.io', role: 'user', dept: 'Marketing', avatar: 'RM', status: 'inactive', joined: '2024-03-10' },
-  { id: 3, name: 'Sneha Patel', email: 'sneha@smartattend.io', role: 'user', dept: 'Engineering', avatar: 'SP', status: 'active', joined: '2024-01-28' },
-  { id: 4, name: 'Dev Kumar', email: 'dev@smartattend.io', role: 'user', dept: 'HR', avatar: 'DK', status: 'active', joined: '2024-04-05' },
-  { id: 5, name: 'Kavita Joshi', email: 'kavita@smartattend.io', role: 'user', dept: 'Finance', avatar: 'KJ', status: 'active', joined: '2024-02-14' },
-];
+interface ActivityItem {
+  id: string | number;
+  user: string;
+  action: string;
+  time: string;
+  type: 'success' | 'warning';
+  dept: string;
+  status: string;
+  method: string;
+}
 
-const ACTIVITY_FEED = [
-  { id: 1, user: 'Priya Nair', action: 'Marked attendance via facial recognition', time: '2 min ago', type: 'success', dept: 'Design' },
-  { id: 2, user: 'Dev Kumar', action: 'Attendance marked successfully', time: '8 min ago', type: 'success', dept: 'HR' },
-  { id: 3, user: 'Rahul Mehta', action: 'Face recognition failed — manual override', time: '22 min ago', type: 'warning', dept: 'Marketing' },
-  { id: 4, user: 'Kavita Joshi', action: 'Marked attendance via image upload', time: '35 min ago', type: 'success', dept: 'Finance' },
-  { id: 5, user: 'Sneha Patel', action: 'Marked attendance via facial recognition', time: '1 hr ago', type: 'success', dept: 'Engineering' },
-];
+interface AdminUser {
+  id: string | number;
+  name: string;
+  email: string;
+  role: string;
+  dept: string;
+  avatar: string;
+  status: string;
+  joined: string;
+}
+
+interface DashboardAnalytics {
+  totalRecords: number;
+  presentCount: number;
+  lateCount: number;
+  absentCount: number;
+  attendanceRate: number | null;
+  averageConfidence: number | null;
+  activeToday: number;
+  weekly: { week: string; present: number; absent: number; late: number }[];
+  activity: ActivityItem[];
+}
 
 /* ─── Cognito Auth Service ─── */
 const authService = {
@@ -413,6 +431,114 @@ function useAuth() {
 /* ─── Attendance API service ─── */
 const ATTENDANCE_API_URL =
   'https://861othoid8.execute-api.ap-south-1.amazonaws.com/prod/mark-attendance';
+const ATTENDANCE_API_BASE = ATTENDANCE_API_URL.replace(/\/mark-attendance$/, '');
+
+const getStringValue = (item: Record<string, unknown>, keys: string[], fallback = '') => {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number') return String(value);
+  }
+  return fallback;
+};
+
+const getNumberValue = (item: Record<string, unknown>, keys: string[]) => {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return null;
+};
+
+const getArrayPayload = (payload: unknown, keys: string[]) => {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === 'object') {
+    const objectPayload = payload as Record<string, unknown>;
+    for (const key of keys) {
+      const value = objectPayload[key];
+      if (Array.isArray(value)) return value;
+    }
+  }
+  return [];
+};
+
+const normalizeAttendanceRecord = (item: unknown, index: number): AttendanceRecord => {
+  const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+  const timestamp = getStringValue(record, ['timestamp', 'createdAt', 'checkInTime', 'time', 'date'], '');
+  const parsedDate = timestamp ? new Date(timestamp) : null;
+  const hasValidDate = parsedDate instanceof Date && !Number.isNaN(parsedDate.getTime());
+  const date = getStringValue(record, ['date', 'attendanceDate'], hasValidDate ? parsedDate.toISOString().slice(0, 10) : '');
+  const checkIn = getStringValue(record, ['checkIn', 'checkInTime', 'time'], hasValidDate ? parsedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-');
+  const status = getStringValue(record, ['status', 'attendanceStatus'], 'present').toLowerCase();
+
+  return {
+    id: getStringValue(record, ['id', 'attendanceId', 'recordId'], `${date || 'attendance'}-${index}`),
+    date,
+    checkIn,
+    checkOut: getStringValue(record, ['checkOut', 'checkOutTime'], '-'),
+    status,
+    confidence: getNumberValue(record, ['confidence', 'Confidence', 'rekognitionConfidence']),
+    method: getStringValue(record, ['method', 'recognitionMethod', 'source'], 'facial'),
+    location: getStringValue(record, ['location', 'site'], '-'),
+    username: getStringValue(record, ['username', 'userName', 'name', 'userId', 'email'], 'User'),
+    timestamp: timestamp || date,
+  };
+};
+
+const getRelativeTime = (timestamp: string) => {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp || '-';
+  const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return date.toLocaleDateString();
+};
+
+const buildAnalytics = (records: AttendanceRecord[]): DashboardAnalytics => {
+  const presentCount = records.filter((r) => r.status === 'present').length;
+  const lateCount = records.filter((r) => r.status === 'late').length;
+  const absentCount = records.filter((r) => r.status === 'absent').length;
+  const confidenceValues = records.map((r) => r.confidence).filter((value): value is number => value !== null);
+  const today = new Date().toISOString().slice(0, 10);
+  const weeklyMap = new Map<string, { week: string; present: number; absent: number; late: number }>();
+
+  records.forEach((record) => {
+    if (!record.date) return;
+    const date = new Date(record.date);
+    if (Number.isNaN(date.getTime())) return;
+    const oneJan = new Date(date.getFullYear(), 0, 1);
+    const week = `W${Math.ceil((((date.getTime() - oneJan.getTime()) / 86400000) + oneJan.getDay() + 1) / 7)}`;
+    const item = weeklyMap.get(week) ?? { week, present: 0, absent: 0, late: 0 };
+    if (record.status === 'late') item.late += 1;
+    else if (record.status === 'absent') item.absent += 1;
+    else item.present += 1;
+    weeklyMap.set(week, item);
+  });
+
+  return {
+    totalRecords: records.length,
+    presentCount,
+    lateCount,
+    absentCount,
+    attendanceRate: records.length ? Math.round(((presentCount + lateCount) / records.length) * 100) : null,
+    averageConfidence: confidenceValues.length ? Number((confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length).toFixed(1)) : null,
+    activeToday: records.filter((r) => r.date === today && r.status !== 'absent').length,
+    weekly: Array.from(weeklyMap.values()).slice(-6),
+    activity: records.slice(0, 6).map((record) => ({
+      id: record.id,
+      user: record.username,
+      action: `${record.status.charAt(0).toUpperCase() + record.status.slice(1)} via ${record.method}`,
+      time: getRelativeTime(record.timestamp || record.date),
+      type: record.status === 'absent' ? 'warning' : 'success',
+      dept: '',
+      status: record.status,
+      method: record.method,
+    })),
+  };
+};
 
 const attendanceService = {
   async markAttendance(uploadedImage: string, username: string) {
@@ -489,18 +615,48 @@ const attendanceService = {
   },
 
   async getHistory() {
-    await new Promise((r) => setTimeout(r, 500));
-    return { records: MOCK_ATTENDANCE, total: MOCK_ATTENDANCE.length };
+    const token = await authService.getIdToken();
+    const response = await fetch(`${ATTENDANCE_API_BASE}/attendance/history`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.message ?? `Attendance history failed with status ${response.status}`);
+    }
+    const records = getArrayPayload(payload, ['records', 'items', 'attendance', 'history']).map(normalizeAttendanceRecord);
+    records.sort((a, b) => new Date(b.timestamp || b.date).getTime() - new Date(a.timestamp || a.date).getTime());
+    return { records, total: records.length };
   },
 
   async getAdminUsers() {
-    await new Promise((r) => setTimeout(r, 500));
-    return { users: MOCK_ADMIN_USERS, total: MOCK_ADMIN_USERS.length };
+    const token = await authService.getIdToken();
+    const response = await fetch(`${ATTENDANCE_API_BASE}/admin/users`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) return { users: [] as AdminUser[], total: 0 };
+    const payload = await response.json().catch(() => ({}));
+    const users = getArrayPayload(payload, ['users', 'items']).map((item, index): AdminUser => {
+      const user = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      const name = getStringValue(user, ['name', 'username', 'userName', 'email'], 'User');
+      return {
+        id: getStringValue(user, ['id', 'userId', 'username', 'email'], String(index)),
+        name,
+        email: getStringValue(user, ['email'], ''),
+        role: getStringValue(user, ['role'], 'user'),
+        dept: getStringValue(user, ['dept', 'department'], ''),
+        avatar: name.split(' ').map((part) => part.charAt(0)).join('').toUpperCase().slice(0, 2) || 'U',
+        status: getStringValue(user, ['status'], 'active'),
+        joined: getStringValue(user, ['joined', 'createdAt', 'created'], ''),
+      };
+    });
+    return { users, total: users.length };
   },
 
   async getAnalytics() {
-    await new Promise((r) => setTimeout(r, 400));
-    return { totalUsers: 6, activeToday: 4, avgAttendance: 87.3, systemLoad: 34 };
+    const history = await this.getHistory();
+    return buildAnalytics(history.records);
   },
 };
 
@@ -1155,18 +1311,25 @@ const Topbar = ({ page, user, theme, toggleTheme, onMenuClick }: TopbarProps) =>
 /* ─── Dashboard ─── */
 const DashboardPage = ({ user }: { user: AppUser }) => {
   const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
 
   useEffect(() => {
-    attendanceService.getAnalytics().then(() => setLoading(false));
+    attendanceService.getAnalytics()
+      .then((data) => setAnalytics(data))
+      .catch((error) => {
+        console.error('Analytics fetch failed:', error);
+        setAnalytics(buildAnalytics([]));
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const firstName = user.name.split(' ')[0];
 
   const stats = [
-    { label: 'Present This Month', value: '22/25', sub: 'Days', icon: 'check_circle', color: 'green', delta: '+2 vs last month' },
-    { label: 'Attendance Rate', value: '88%', sub: 'Average', icon: 'bar', color: 'blue', delta: '↑ 3.2% this week' },
-    { label: 'Streak', value: '7', sub: 'Consecutive days', icon: 'shield', color: 'purple', delta: 'Personal best!' },
-    { label: 'AI Confidence', value: '98.4%', sub: 'Avg recognition', icon: 'cpu', color: 'amber', delta: 'Rekognition v2' },
+    { label: 'Present This Month', value: analytics?.presentCount ?? null, sub: 'Records', icon: 'check_circle', color: 'green' },
+    { label: 'Attendance Rate', value: analytics?.attendanceRate !== null && analytics?.attendanceRate !== undefined ? `${analytics.attendanceRate}%` : null, sub: 'From records', icon: 'bar', color: 'blue' },
+    { label: 'Total Attendance', value: analytics?.totalRecords ?? null, sub: 'DynamoDB records', icon: 'shield', color: 'purple' },
+    { label: 'AI Confidence', value: analytics?.averageConfidence !== null && analytics?.averageConfidence !== undefined ? `${analytics.averageConfidence}%` : null, sub: 'Avg recognition', icon: 'cpu', color: 'amber' },
   ];
 
   return (
@@ -1187,7 +1350,7 @@ const DashboardPage = ({ user }: { user: AppUser }) => {
               <span className="badge badge-purple"><Icon name="cpu" size={10} />Rekognition Online</span>
             </div>
           </div>
-          <DonutChart percent={88} size={100} />
+          <DonutChart percent={analytics?.attendanceRate ?? 0} size={100} />
         </div>
       </div>
 
@@ -1202,9 +1365,9 @@ const DashboardPage = ({ user }: { user: AppUser }) => {
             </div>
             {loading ? <Skel h={32} w={80} /> : (
               <>
-                <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>{s.value ?? 'No data'}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{s.sub}</div>
-                <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 8 }}>{s.delta}</div>
+                <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 8 }}>{analytics?.totalRecords ? 'Real attendance data' : 'No attendance data available'}</div>
               </>
             )}
           </div>
@@ -1218,29 +1381,24 @@ const DashboardPage = ({ user }: { user: AppUser }) => {
               <div className="font-semibold">Weekly Attendance</div>
               <div className="text-xs text-muted">Last 6 weeks overview</div>
             </div>
-            <span className="badge badge-blue">Jun–Jul 2025</span>
+            <span className="badge badge-blue">DynamoDB</span>
           </div>
           <div style={{ height: 180, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '0 8px' }}>
-            {[
-              { week: 'W1', present: 22, absent: 1, late: 2 },
-              { week: 'W2', present: 20, absent: 3, late: 2 },
-              { week: 'W3', present: 23, absent: 1, late: 1 },
-              { week: 'W4', present: 21, absent: 2, late: 2 },
-              { week: 'W5', present: 24, absent: 1, late: 0 },
-              { week: 'W6', present: 22, absent: 2, late: 1 },
-            ].map((d) => {
+            {analytics?.weekly.length ? analytics.weekly.map((d) => {
               const total = d.present + d.absent + d.late;
               return (
                 <div key={d.week} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                   <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <div style={{ height: (d.late / total) * 140, background: 'var(--amber)', borderRadius: '3px 3px 0 0', opacity: .8 }} />
-                    <div style={{ height: (d.absent / total) * 140, background: 'var(--red)', opacity: .8 }} />
-                    <div style={{ height: (d.present / total) * 140, background: 'var(--accent)', borderRadius: '0 0 3px 3px', opacity: .9 }} />
+                    <div style={{ height: total ? (d.late / total) * 140 : 0, background: 'var(--amber)', borderRadius: '3px 3px 0 0', opacity: .8 }} />
+                    <div style={{ height: total ? (d.absent / total) * 140 : 0, background: 'var(--red)', opacity: .8 }} />
+                    <div style={{ height: total ? (d.present / total) * 140 : 0, background: 'var(--accent)', borderRadius: '0 0 3px 3px', opacity: .9 }} />
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{d.week}</div>
                 </div>
               );
-            })}
+            }) : (
+              <div style={{ width: '100%', alignSelf: 'center', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No attendance data available</div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
             {[{ c: 'var(--accent)', l: 'Present' }, { c: 'var(--red)', l: 'Absent' }, { c: 'var(--amber)', l: 'Late' }].map(({ c, l }) => (
@@ -1260,43 +1418,27 @@ const DashboardPage = ({ user }: { user: AppUser }) => {
             <span className="badge badge-green" style={{ animation: 'pulse 2s infinite' }}><span className="dot dot-green" />Live</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {ACTIVITY_FEED.map((a, i) => (
-              <div key={a.id} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: i < ACTIVITY_FEED.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            {analytics?.activity.length ? analytics.activity.map((a, i) => (
+              <div key={a.id} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: i < analytics.activity.length - 1 ? '1px solid var(--border)' : 'none' }}>
                 <Avatar initials={a.user.split(' ').map((n) => n[0]).join('')} size={32} color={a.type === 'warning' ? 'amber' : 'accent'} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{a.user} <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>· {a.dept}</span></div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{a.user}{a.dept ? <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}> · {a.dept}</span> : null}</div>
                   <div className="text-xs text-muted truncate">{a.action}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{a.time}</div>
                 </div>
                 {a.type === 'warning' ? <Icon name="alert" size={14} color="var(--amber)" /> : <Icon name="check" size={14} color="var(--green)" />}
               </div>
-            ))}
+            )) : (
+              <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)', fontSize: 13 }}>No recent activity</div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>
         <div className="font-semibold mb-4">AWS Cloud Services</div>
-        <div className="grid grid-4" style={{ gap: 12 }}>
-          {[
-            { name: 'Lambda Functions', status: 'Running', load: '23%', color: 'green' },
-            { name: 'Rekognition API', status: 'Active', load: 'Active', color: 'green' },
-            { name: 'DynamoDB', status: 'Healthy', load: '12ms', color: 'green' },
-            { name: 'API Gateway', status: 'Online', load: '99.9%', color: 'green' },
-            { name: 'S3 Storage', status: 'Available', load: '4.2 GB', color: 'green' },
-            { name: 'CloudWatch', status: 'Monitoring', load: '24/7', color: 'blue' },
-            { name: 'Cognito', status: 'Running', load: 'Active', color: 'green' },
-            { name: 'CloudFront CDN', status: 'Active', load: '<10ms', color: 'blue' },
-          ].map((s) => (
-            <div key={s.name} style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: 12, border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <Icon name="cloud" size={14} color={`var(--${s.color === 'blue' ? 'accent' : s.color})`} />
-                <span className={`badge badge-${s.color === 'blue' ? 'blue' : 'green'}`} style={{ fontSize: 10, padding: '1px 6px' }}>{s.status}</span>
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 500 }}>{s.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>{s.load}</div>
-            </div>
-          ))}
+        <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)', fontSize: 13 }}>
+          No service metrics available
         </div>
       </div>
     </div>
@@ -1402,9 +1544,14 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
             <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-secondary)', aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.12)', display: cameraOn ? 'block' : 'none' }} />
               {!cameraOn && !preview && (
-                <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>
                   <Icon name="camera" size={48} color="var(--border)" />
-                  <div style={{ fontSize: 13, marginTop: 12 }}>Camera inactive</div>
+                  <div style={{ fontSize: 13 }}>Camera inactive</div>
+                  {status === 'idle' && (
+                    <button className="btn btn-primary" style={{ justifyContent: 'center' }} onClick={startCamera}>
+                      <Icon name="camera" size={16} />Start Camera
+                    </button>
+                  )}
                 </div>
               )}
               {preview && <img src={preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Captured" />}
@@ -1447,11 +1594,6 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
           )}
 
           <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            {mode === 'camera' && !cameraOn && status === 'idle' && (
-              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={startCamera}>
-                <Icon name="camera" size={16} />Start Camera
-              </button>
-            )}
             {mode === 'camera' && cameraOn && (
               <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', animation: 'glowPulse 2s infinite' }} onClick={capture}>
                 <Icon name="scan" size={16} />Capture & Verify
@@ -1563,7 +1705,7 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
 
 /* ─── History Page ─── */
 const HistoryPage = () => {
-  const [records, setRecords] = useState<typeof MOCK_ATTENDANCE>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -1574,7 +1716,13 @@ const HistoryPage = () => {
   const PER_PAGE = 5;
 
   useEffect(() => {
-    attendanceService.getHistory().then((res) => { setRecords(res.records); setLoading(false); });
+    attendanceService.getHistory()
+      .then((res) => setRecords(res.records))
+      .catch((error) => {
+        console.error('Attendance history fetch failed:', error);
+        setRecords([]);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = records.filter((r) => {
@@ -1650,7 +1798,7 @@ const HistoryPage = () => {
                 <tr key={i}>{Array(7).fill(0).map((_, j) => <td key={j}><Skel h={16} /></td>)}</tr>
               ))
               : paginated.length === 0
-                ? <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>No records found</td></tr>
+                ? <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>No attendance records found</td></tr>
                 : paginated.map((r) => (
                   <tr key={r.id}>
                     <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{r.date}</span></td>
@@ -1699,51 +1847,65 @@ const HistoryPage = () => {
 };
 
 /* ─── Admin Panel ─── */
-interface AdminUser {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  dept: string;
-  avatar: string;
-  status: string;
-  joined: string;
-}
-
 const AdminPage = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', dept: '', role: 'user' });
   const toast = useToast();
 
   useEffect(() => {
-    attendanceService.getAdminUsers().then((res) => { setUsers(res.users); setLoading(false); });
+    Promise.all([
+      attendanceService.getAdminUsers().catch((error) => {
+        console.error('Admin users fetch failed:', error);
+        return { users: [] as AdminUser[], total: 0 };
+      }),
+      attendanceService.getAnalytics().catch((error) => {
+        console.error('Admin analytics fetch failed:', error);
+        return buildAnalytics([]);
+      }),
+    ]).then(([userResult, analyticsResult]) => {
+      setUsers(userResult.users);
+      setAnalytics(analyticsResult);
+    }).finally(() => setLoading(false));
   }, []);
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!newUser.name || !newUser.email) { toast.add('Please fill in all required fields', 'error'); return; }
-    const u: AdminUser = {
-      ...newUser,
-      id: Date.now(),
-      avatar: newUser.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2),
-      status: 'active',
-      joined: new Date().toLocaleDateString('en-CA'),
-    };
-    setUsers((prev) => [...prev, u]);
-    setShowModal(false);
-    setNewUser({ name: '', email: '', dept: '', role: 'user' });
-    toast.add(`User ${u.name} added successfully`, 'success');
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      if (!response.ok) throw new Error(`User API failed with status ${response.status}`);
+      const userResult = await attendanceService.getAdminUsers();
+      setUsers(userResult.users);
+      setShowModal(false);
+      setNewUser({ name: '', email: '', dept: '', role: 'user' });
+      toast.add('User request submitted', 'success');
+    } catch (error) {
+      console.error('Add user failed:', error);
+      toast.add('User could not be saved by backend', 'error');
+    }
   };
+
+  const departmentRows = Array.from(
+    users.filter((u) => u.dept).reduce((map, user) => {
+      map.set(user.dept, (map.get(user.dept) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()),
+  );
 
   return (
     <div className="animate-fade">
       <div className="grid grid-4 mb-6" style={{ gap: 14 }}>
         {[
           { l: 'Total Users', v: users.length, icon: 'users', c: 'blue' },
-          { l: 'Active Today', v: 4, icon: 'check_circle', c: 'green' },
-          { l: 'Avg Attendance', v: '87.3%', icon: 'bar', c: 'purple' },
-          { l: 'System Load', v: '34%', icon: 'cpu', c: 'amber' },
+          { l: 'Active Today', v: analytics?.activeToday ?? 0, icon: 'check_circle', c: 'green' },
+          { l: 'Avg Attendance', v: analytics?.attendanceRate !== null && analytics?.attendanceRate !== undefined ? `${analytics.attendanceRate}%` : 'No data', icon: 'bar', c: 'purple' },
+          { l: 'API Metrics', v: 'Unavailable', icon: 'cpu', c: 'amber' },
         ].map((card, i) => (
           <div key={i} className={`stat-card ${card.c === 'blue' ? 'blue' : card.c === 'green' ? 'green' : card.c === 'purple' ? 'purple' : 'amber'}`}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1763,8 +1925,7 @@ const AdminPage = () => {
       <div className="grid-2 grid mb-6" style={{ gap: 20 }}>
         <div className="card">
           <div className="font-semibold mb-4">Department Breakdown</div>
-          {['Engineering', 'Design', 'Marketing', 'HR', 'Finance'].map((dept, i) => {
-            const count = users.filter((u) => u.dept === dept).length;
+          {departmentRows.length ? departmentRows.map(([dept, count], i) => {
             const pct = users.length ? Math.round((count / users.length) * 100) : 0;
             return (
               <div key={dept} style={{ marginBottom: 14 }}>
@@ -1777,26 +1938,15 @@ const AdminPage = () => {
                 </div>
               </div>
             );
-          })}
+          }) : (
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)', fontSize: 13 }}>No department data available</div>
+          )}
         </div>
 
         <div className="card">
           <div className="font-semibold mb-4">API Activity Overview</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { endpoint: 'POST /mark-attendance', calls: 1247, status: '200', ms: 89 },
-              { endpoint: 'GET /api/attendance/history', calls: 892, status: '200', ms: 45 },
-              { endpoint: 'POST /api/auth/login', calls: 234, status: '200', ms: 120 },
-              { endpoint: 'GET /api/admin/users', calls: 156, status: '200', ms: 34 },
-              { endpoint: 'POST /api/auth/register', calls: 67, status: '201', ms: 230 },
-            ].map((a) => (
-              <div key={a.endpoint} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--bg-secondary)', borderRadius: 6 }}>
-                <span className="badge badge-green" style={{ fontSize: 10, padding: '2px 6px', fontFamily: 'var(--font-mono)' }}>{a.status}</span>
-                <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-dim)' }}>{a.endpoint}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{a.calls}</span>
-                <span style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{a.ms}ms</span>
-              </div>
-            ))}
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)', fontSize: 13 }}>No API metrics available</div>
           </div>
         </div>
       </div>
@@ -1825,6 +1975,8 @@ const AdminPage = () => {
                 ? Array(4).fill(0).map((_, i) => (
                   <tr key={i}>{Array(6).fill(0).map((_, j) => <td key={j}><Skel h={16} /></td>)}</tr>
                 ))
+                : users.length === 0
+                  ? <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>No registered users found</td></tr>
                 : users.map((u) => (
                   <tr key={u.id}>
                     <td>
@@ -1873,7 +2025,7 @@ const AdminPage = () => {
             </div>
             <div className="form-group">
               <label className="form-label">Full Name *</label>
-              <input className="form-input" placeholder="Priya Nair" value={newUser.name}
+              <input className="form-input" placeholder="Full name" value={newUser.name}
                 onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} />
             </div>
             <div className="form-group">
