@@ -415,23 +415,23 @@ const ATTENDANCE_API_URL =
   'https://861othoid8.execute-api.ap-south-1.amazonaws.com/prod/mark-attendance';
 
 const attendanceService = {
-  async markAttendance(imageData: string, username: string) {
+  async markAttendance(uploadedImage: string, username: string) {
     const token = await authService.getIdToken();
     if (!ATTENDANCE_API_URL) throw new Error('Attendance API URL is not configured.');
     console.log('Final API URL:', ATTENDANCE_API_URL);
     console.log('REAL FETCH URL:', ATTENDANCE_API_URL);
     console.log('Fetch URL:', ATTENDANCE_API_URL);
     console.log('Calling endpoint:', ATTENDANCE_API_URL);
-    console.log('Payload:', { username, imageDataLength: imageData.length, hasBase64: imageData.includes('base64,') });
     console.log('STEP 2');
-    const payload = { image: imageData, username, token };
+    const payload = { userId: username, uploadedImage };
+    console.log('Payload:', payload);
     let response: Response;
     try {
       console.log('Sending request...');
       response = await fetch(ATTENDANCE_API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain;charset=UTF-8',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
@@ -440,6 +440,7 @@ const attendanceService = {
       throw error;
     }
     const responsePayload = await response.json().catch(() => ({}));
+    console.log('Attendance API Response:', responsePayload);
     if (!response.ok) {
       throw new Error(responsePayload?.message ?? `Attendance API failed with status ${response.status}`);
     }
@@ -484,7 +485,7 @@ const attendanceService = {
       throw new Error(uploadPayload?.error ?? `S3 upload failed with status ${uploadResponse.status}`);
     }
 
-    return uploadPayload.fileUrl ?? file.name;
+    return uploadPayload.fileUrl ? new URL(uploadPayload.fileUrl).pathname.slice(1) : file.name;
   },
 
   async getHistory() {
@@ -1342,10 +1343,8 @@ const MarkAttendancePage = ({ user }: { user: AppUser }) => {
     setStatus('scanning'); setProgress(0); setResult(null);
     const interval = setInterval(() => setProgress((p) => Math.min(p + 10, 90)), 180);
     try {
-      const res = await attendanceService.markAttendance(imageData, user.username);
-      attendanceService.uploadAttendanceImage(imageData, user.username).catch((error) => {
-        console.error('Attendance snapshot upload failed:', error);
-      });
+      const uploadedImage = await attendanceService.uploadAttendanceImage(imageData, user.username);
+      const res = await attendanceService.markAttendance(uploadedImage, user.username);
       clearInterval(interval); setProgress(100);
       setTimeout(() => { setStatus('success'); setResult(res); toast.add(`Attendance marked! Confidence: ${res.confidence}%`, 'success'); }, 400);
     } catch (error) {
