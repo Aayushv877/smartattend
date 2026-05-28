@@ -38,18 +38,17 @@ export async function POST(
       );
     }
 
-    const bucket = getRequiredEnv("AWS_BUCKET_NAME");
-    const region = getRequiredEnv("AWS_REGION");
+    const bucket = getRequiredEnv("NEXT_PUBLIC_S3_BUCKET_NAME");
+const region = getRequiredEnv("NEXT_PUBLIC_S3_REGION");
     const accessKeyId =
-      getRequiredEnv("AWS_ACCESS_KEY_ID");
+      getRequiredEnv("NEXT_PUBLIC_AWS_ACCESS_KEY_ID");
     const secretAccessKey =
-      getRequiredEnv("AWS_SECRET_ACCESS_KEY");
-
+      getRequiredEnv("NEXT_PUBLIC_AWS_SECRET_ACCESS_KEY");
     console.log("Region:", region);
     console.log("Bucket:", bucket);
     console.log(
       "Access Key Exists:",
-      !!process.env.AWS_ACCESS_KEY_ID
+     !!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID
     );
     console.log(
       "Secret Exists:",
