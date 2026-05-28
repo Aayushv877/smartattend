@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+SmartAttend — AI-Powered Serverless Attendance Management System
 
-## Getting Started
+SmartAttend is a cloud-native attendance management platform built using Next.js and AWS Serverless Services.
+The system uses AI-powered facial recognition to automate attendance marking with secure authentication, cloud storage, and real-time analytics.
 
-First, run the development server:
+Features
+AI-powered facial recognition attendance
+Live camera attendance verification
+Image upload attendance verification
+Secure authentication with AWS Cognito
+Email verification & JWT authentication
+Attendance dashboard & analytics
+Attendance history management
+Admin monitoring panel
+Real-time attendance tracking
+Responsive dark-themed UI
+Fully serverless backend architecture
+AWS Services Used
+AWS Amplify — Frontend hosting & CI/CD
+Amazon Cognito — Authentication & user management
+Amazon Rekognition — Facial recognition
+AWS Lambda — Serverless backend processing
+Amazon API Gateway — REST API management
+Amazon DynamoDB — Attendance & user data storage
+Amazon S3 — Image storage
+Amazon CloudWatch — Logging & monitoring
+Tech Stack
+Next.js
+React
+TypeScript
+AWS SDK
+Tailwind CSS
+Node.js
+Architecture
+Frontend (Next.js + Amplify)
+        ↓
+Amazon Cognito Authentication
+        ↓
+API Gateway
+        ↓
+AWS Lambda
+        ↓
+Rekognition + DynamoDB + S3
+Project Screens
+Authentication System
+AI Attendance Marking
+Attendance Dashboard
+Attendance History
+Admin Panel
+Real-Time Analytics
+Installation & Setup
+1. Clone Repository
+git clone YOUR_GITHUB_REPO_LINK
+cd smartattend
+2. Install Dependencies
+npm install
+3. Configure Environment Variables
 
-```bash
+Create .env.local
+
+NEXT_PUBLIC_AWS_REGION=ap-south-1
+NEXT_PUBLIC_COGNITO_USER_POOL_ID=YOUR_USER_POOL_ID
+NEXT_PUBLIC_COGNITO_CLIENT_ID=YOUR_CLIENT_ID
+
+NEXT_PUBLIC_S3_BUCKET_NAME=YOUR_BUCKET_NAME
+NEXT_PUBLIC_S3_REGION=ap-south-1
+
+S3_BUCKET_NAME=YOUR_BUCKET_NAME
+S3_REGION=ap-south-1
+
+APP_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+APP_SECRET_ACCESS_KEY=YOUR_SECRET_KEY
+
+NEXT_PUBLIC_ATTENDANCE_API_URL=YOUR_API_GATEWAY_URL
+Run Locally
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Build Project
+npm run build
+Deploy on AWS Amplify
+Push project to GitHub
+Open AWS Amplify
+Connect GitHub repository
+Add environment variables
+Deploy application
+Key Functionalities
+Authentication
+User Signup
+Email Verification
+Login/Logout
+JWT Session Management
+Attendance System
+Live Camera Recognition
+Image Upload Verification
+AI Confidence Scoring
+Attendance Status Tracking
+Admin Features
+User Monitoring
+Attendance Analytics
+Attendance Reports
+Dashboard Insights
+Learning Outcomes
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This project helped strengthen practical knowledge in:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+AWS Serverless Architecture
+Cloud-Native Application Development
+AI Service Integration
+Authentication Workflows
+Scalable Backend Design
+CI/CD Deployment Pipelines
+Cloud Monitoring & Debugging
+Future Improvements
+Multi-face attendance support
+Real-time notifications
+Geo-location verification
+Role-based access control
+Attendance export to PDF/Excel
+Advanced analytics dashboard
+Author
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Aayush Vishwakarma
+Cloud & DevOps Engineer | AWS Cloud Enthusiast
 
-## Learn More
+GitHub: https://github.com/Aayushv877
+LinkedIn: https://www.linkedin.com/in/aayush-vishwakarma-1272ab316
 
-To learn more about Next.js, take a look at the following resources:
+License
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is for educational and portfolio purposes.
